@@ -53,7 +53,14 @@ class Orchestrator:
         obs_controller = OBSController(self._config.obs, self._logger)
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=self._config.headless)
+            # Se usa el canal 'chrome' (Chrome real instalado) para reducir la
+            # detección de automatización por parte de Facebook, igual que en
+            # setup_facebook_login.py. Requiere: playwright install chrome
+            browser = playwright.chromium.launch(
+                headless=self._config.headless,
+                channel="chrome",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
 
             # --- Contexto de Facebook (sesión persistente) ---
             fb_state_path = self._config.facebook.storage_state_path
@@ -62,7 +69,14 @@ class Orchestrator:
                     f"No existe el archivo de sesión de Facebook ('{fb_state_path}'). "
                     "Ejecuta primero: python setup_facebook_login.py"
                 )
-            fb_context = browser.new_context(storage_state=str(fb_state_path))
+            fb_context = browser.new_context(
+                storage_state=str(fb_state_path),
+                viewport={"width": 1280, "height": 800},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                ),
+            )
             fb_page = fb_context.new_page()
             facebook = FacebookAutomation(fb_page, self._config.facebook, self._logger)
 

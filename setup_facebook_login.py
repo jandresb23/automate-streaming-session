@@ -20,8 +20,22 @@ def main() -> None:
     logger = setup_logger(config.log_level)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
+        # Se usa el canal 'chrome' (tu Google Chrome real instalado) en vez del
+        # Chromium genérico de Playwright, y se desactivan las señales más
+        # comunes que Facebook usa para detectar navegadores automatizados.
+        # Requiere haber ejecutado antes: playwright install chrome
+        browser = p.chromium.launch(
+            headless=False,
+            channel="chrome",
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+        )
         page = context.new_page()
         page.goto("https://www.facebook.com/login")
 

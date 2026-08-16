@@ -103,41 +103,75 @@ class OBSController:
 
     def validate_recording_format(self) -> None:
         """Valida que el formato de grabación configurado sea el esperado
-        (por defecto 'mkv'); si no lo es, lo corrige."""
+        (por defecto 'mkv'); si no lo es, lo corrige.
+
+        IMPORTANTE: OBS guarda 'RecFormat2' en varias secciones del perfil
+        ([AdvOut], [SimpleOutput], [Output]), pero solo la de [AdvOut]
+        controla la interfaz cuando el modo de salida es "Avanzado"
+        (Settings > Output > Mode = Advanced), que es la configuración
+        recomendada para este proyecto. Por eso se usa 'AdvOut' como
+        categoría principal.
+        """
         client = self._client_or_raise()
         expected = self._config.recording_format.lower()
 
-        try:
-            current = client.get_profile_parameter(
-                parameter_category="Output", parameter_name="RecFormat2"
-            )
-            current_format = getattr(current, "parameter_value", None)
-        except Exception as exc:
-            raise OBSControllerError(
-                "No se pudo leer el formato de grabación actual de OBS."
-            ) from exc
+        # (categoría, nombre_parámetro) en orden de prioridad.
+        candidates = [
+            ("AdvOut", "RecFormat2"),   # OBS reciente, modo Avanzado (caso esperado)
+            ("AdvOut", "RecFormat"),    # OBS más antiguo, modo Avanzado
+            ("Output", "RecFormat2"),   # Respaldo genérico
+        ]
 
-        if current_format and current_format.lower() == expected:
+        current_format = None
+        working_candidate = None
+        last_error: Exception | None = None
+
+        for category, name in candidates:
+            try:
+                response = client.get_profile_parameter(category=category, name=name)
+            except Exception as exc:
+                last_error = exc
+                continue
+
+            # El nombre exacto del atributo de respuesta puede variar entre
+            # versiones de obsws-python; probamos las variantes conocidas.
+            value = (
+                getattr(response, "parameter_value", None)
+                or getattr(response, "parameterValue", None)
+                or (response.get("parameterValue") if isinstance(response, dict) else None)
+            )
+            if value is not None:
+                current_format = value
+                working_candidate = (category, name)
+                break
+
+        if working_candidate is None:
+            raise OBSControllerError(
+                "No se pudo leer el formato de grabación actual de OBS en ninguna "
+                f"de las categorías conocidas. Último error: {last_error}"
+            )
+
+        category, name = working_candidate
+        self._logger.info(
+            "Formato de grabación leído desde [%s] %s = '%s'.", category, name, current_format
+        )
+
+        if current_format.lower() == expected:
             self._logger.info("Formato de grabación ya está en '%s'. OK.", expected)
             return
 
         self._logger.warning(
-            "Formato de grabación actual ('%s') distinto al esperado ('%s'). Corrigiendo...",
+            "Formato de grabación actual ('%s') distinto al esperado ('%s'). Corrigiendo en [%s]...",
             current_format,
             expected,
+            category,
         )
         try:
-            client.set_profile_parameter(
-                parameter_category="Output",
-                parameter_name="RecFormat2",
-                parameter_value=expected,
-            )
+            client.set_profile_parameter(category=category, name=name, value=expected)
         except Exception as exc:
             raise OBSControllerError(
-                "No se pudo ajustar el formato de grabación a Matroska (mkv). "
-                "Puede que tu versión de OBS use un nombre de parámetro distinto "
-                "('RecFormat' en vez de 'RecFormat2'); revisa la documentación de obs-websocket "
-                "para tu versión instalada."
+                f"No se pudo ajustar el formato de grabación a '{expected}' "
+                f"en [{category}] {name}."
             ) from exc
 
     def start_streaming(self) -> None:
