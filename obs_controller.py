@@ -57,6 +57,8 @@ class OBSController:
         )
 
     def _try_connect(self) -> bool:
+        # Si OBS_PASSWORD está vacío (auth deshabilitada en OBS), obsws-python
+        # simplemente ignora este parámetro al conectar.
         try:
             self._client = obs.ReqClient(
                 host=self._config.host,

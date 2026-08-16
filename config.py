@@ -69,7 +69,9 @@ def load_config() -> AppConfig:
     obs = OBSConfig(
         host=os.getenv("OBS_HOST", "localhost"),
         port=int(os.getenv("OBS_PORT", "4455")),
-        password=_require("OBS_PASSWORD"),
+        # Contraseña opcional: si el WebSocket de OBS no tiene autenticación
+        # habilitada, deja OBS_PASSWORD vacío en el .env.
+        password=os.getenv("OBS_PASSWORD", ""),
         executable_path=Path(_require("OBS_EXECUTABLE_PATH")),
         scene_name=_require("OBS_SCENE_NAME"),
         browser_source_name=_require("OBS_BROWSER_SOURCE_NAME"),
