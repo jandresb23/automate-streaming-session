@@ -3,3 +3,7 @@ facebook_session.json
 __pycache__/
 *.pyc
 .venv/
+client_secret*.json
+secrets.txt
+youtube_token.json
+chrome_profile_facebook/

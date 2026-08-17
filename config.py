@@ -49,18 +49,25 @@ class VDONinjaConfig:
 
 
 @dataclass(frozen=True)
-class FacebookConfig:
-    storage_state_path: Path
-    live_producer_url: str
-    # El título ya NO se lee de .env: se solicita al usuario en cada sesión
-    # desde la interfaz (ver main.py).
+class YouTubeConfig:
+    # Ruta al archivo client_secret.json descargado desde Google Cloud
+    # Console (credencial OAuth de tipo "Aplicación de escritorio").
+    client_secrets_path: Path
+    # Ruta donde se guarda el token ya autorizado tras el primer login
+    # (se genera automáticamente con setup_youtube_auth.py).
+    token_path: Path
+    # 'public', 'unlisted' o 'private'
+    privacy_status: str
+    # Segundos máximos a esperar a que YouTube detecte la señal entrante
+    # de OBS antes de intentar pasar el broadcast a "live".
+    stream_active_timeout_seconds: int
 
 
 @dataclass(frozen=True)
 class AppConfig:
     obs: OBSConfig
     vdoninja: VDONinjaConfig
-    facebook: FacebookConfig
+    youtube: YouTubeConfig
     headless: bool
     log_level: str
 
@@ -86,19 +93,19 @@ def load_config() -> AppConfig:
         ),
     )
 
-    facebook = FacebookConfig(
-        storage_state_path=Path(
-            os.getenv("FACEBOOK_STORAGE_STATE", "facebook_session.json")
-        ),
-        live_producer_url=os.getenv(
-            "FACEBOOK_LIVE_PRODUCER_URL", "https://www.facebook.com/live/producer"
+    youtube = YouTubeConfig(
+        client_secrets_path=Path(_require("YOUTUBE_CLIENT_SECRETS_PATH")),
+        token_path=Path(os.getenv("YOUTUBE_TOKEN_PATH", "youtube_token.json")),
+        privacy_status=os.getenv("YOUTUBE_PRIVACY_STATUS", "unlisted"),
+        stream_active_timeout_seconds=int(
+            os.getenv("YOUTUBE_STREAM_ACTIVE_TIMEOUT_SECONDS", "60")
         ),
     )
 
     return AppConfig(
         obs=obs,
         vdoninja=vdoninja,
-        facebook=facebook,
+        youtube=youtube,
         headless=os.getenv("PLAYWRIGHT_HEADLESS", "false").lower() == "true",
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )

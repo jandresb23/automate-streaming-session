@@ -1,18 +1,21 @@
 """
 Orchestrator: coordina la secuencia completa de alistamiento del streaming.
 
-Orden (según lo definido con el usuario):
-  1. Iniciar Facebook
-  2. Insertar título de sesión
+Orden actualizado (YouTube reemplaza a Facebook como servidor de transmisión):
+  1. Crear transmisión (broadcast) en YouTube con el título de la sesión
+  2. Crear el stream de ingesta y vincularlo al broadcast (API de YouTube)
   3. Abrir VDO.Ninja
   4. Clic en "Create Reusable Invite" (genera QR + URL)
   5. Almacenar la URL
   6. (Manual) El usuario escanea el QR con su móvil
   7. Iniciar OBS Studio
-  8. Insertar la URL en el Browser Source
+  8. Insertar la URL de VDO.Ninja en el Browser Source
   9. Validar formato de video (Matroska)
-  10. Iniciar transmisión en OBS
-  11. Ir a Facebook y hacer clic en iniciar transmisión
+  10. Configurar en OBS el servidor/stream key de YouTube e iniciar transmisión
+  11. Esperar a que YouTube detecte la señal y transicionar el broadcast a "live"
+
+A diferencia del flujo con Facebook, aquí NO se usa Playwright/navegador para
+YouTube — solo llamadas directas a su API oficial, mucho más robustas.
 """
 
 from __future__ import annotations
@@ -22,9 +25,9 @@ import logging
 from playwright.sync_api import sync_playwright
 
 from config import AppConfig
-from facebook_automation import FacebookAutomation, FacebookAutomationError
 from obs_controller import OBSController, OBSControllerError
 from vdoninja_automation import VDONinjaAutomation, VDONinjaAutomationError
+from youtube_automation import YouTubeAutomation, YouTubeAutomationError
 
 
 class OrchestratorError(Exception):
@@ -50,47 +53,25 @@ class Orchestrator:
         """
         if not title or not title.strip():
             raise OrchestratorError("El título de la sesión no puede estar vacío.")
+
         obs_controller = OBSController(self._config.obs, self._logger)
+        youtube = YouTubeAutomation(self._config.youtube, self._logger)
 
         with sync_playwright() as playwright:
-            # Se usa el canal 'chrome' (Chrome real instalado) para reducir la
-            # detección de automatización por parte de Facebook, igual que en
-            # setup_facebook_login.py. Requiere: playwright install chrome
-            browser = playwright.chromium.launch(
-                headless=self._config.headless,
-                channel="chrome",
-                args=["--disable-blink-features=AutomationControlled"],
+            # Solo VDO.Ninja necesita navegador; YouTube usa su API directamente.
+            vdo_browser = playwright.chromium.launch(
+                channel="chrome", headless=self._config.headless
             )
-
-            # --- Contexto de Facebook (sesión persistente) ---
-            fb_state_path = self._config.facebook.storage_state_path
-            if not fb_state_path.exists():
-                raise OrchestratorError(
-                    f"No existe el archivo de sesión de Facebook ('{fb_state_path}'). "
-                    "Ejecuta primero: python setup_facebook_login.py"
-                )
-            fb_context = browser.new_context(
-                storage_state=str(fb_state_path),
-                viewport={"width": 1280, "height": 800},
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                ),
-            )
-            fb_page = fb_context.new_page()
-            facebook = FacebookAutomation(fb_page, self._config.facebook, self._logger)
-
-            # --- Contexto de VDO.Ninja (sin sesión, no la necesita) ---
-            vdo_context = browser.new_context()
+            vdo_context = vdo_browser.new_context()
             vdo_page = vdo_context.new_page()
             vdoninja = VDONinjaAutomation(vdo_page, self._config.vdoninja, self._logger)
 
             try:
-                # 1-2: Facebook, título
-                self._step("1-2. Facebook: abrir y colocar título", facebook.open_live_producer)
-                self._step(
-                    "1-2. Facebook: insertar título",
-                    lambda: facebook.set_title(title),
+                # 1-2: YouTube — crear broadcast + stream, vincular
+                self._step("1. YouTube: autenticar", youtube.connect)
+                broadcast_id, stream_id, rtmp_server, stream_key = self._step(
+                    "1-2. YouTube: crear transmisión y stream de ingesta",
+                    lambda: youtube.create_broadcast_and_stream(title),
                 )
 
                 # 3-5: VDO.Ninja, invitación y URL
@@ -117,20 +98,30 @@ class Orchestrator:
                 # 9: validar formato Matroska
                 self._step("9. OBS: validar formato de grabación (mkv)", obs_controller.validate_recording_format)
 
-                # 10: iniciar transmisión en OBS
+                # 10: configurar destino YouTube e iniciar transmisión en OBS
+                self._step(
+                    "10. OBS: configurar servidor/stream key de YouTube",
+                    lambda: obs_controller.set_stream_destination(rtmp_server, stream_key),
+                )
                 self._step("10. OBS: iniciar transmisión", obs_controller.start_streaming)
 
-                # 11: Facebook, iniciar transmisión
-                self._step("11. Facebook: iniciar transmisión en vivo", facebook.start_live)
+                # 11: esperar señal activa y pasar el broadcast a "live"
+                self._step(
+                    "11. YouTube: esperar señal activa",
+                    lambda: youtube.wait_for_active_stream(stream_id),
+                )
+                self._step(
+                    "11. YouTube: iniciar transmisión en vivo",
+                    lambda: youtube.go_live(broadcast_id),
+                )
 
                 self._logger.info("✅ Alistamiento completado. La transmisión está en vivo.")
 
-            except (OBSControllerError, VDONinjaAutomationError, FacebookAutomationError) as exc:
+            except (OBSControllerError, VDONinjaAutomationError, YouTubeAutomationError) as exc:
                 raise OrchestratorError(str(exc)) from exc
             finally:
-                fb_context.close()
                 vdo_context.close()
-                browser.close()
+                vdo_browser.close()
                 obs_controller.disconnect()
 
     def _step(self, description: str, action):

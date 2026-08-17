@@ -174,6 +174,31 @@ class OBSController:
                 f"en [{category}] {name}."
             ) from exc
 
+    def set_stream_destination(self, server: str, stream_key: str) -> None:
+        """Configura OBS para transmitir a un servidor RTMP personalizado
+        (usado para cargar el servidor + stream key que YouTube genera en
+        cada transmisión, ya que cambia cada vez).
+
+        NOTA: se llama de forma posicional (no con keywords) porque, según
+        vimos con otros métodos de obsws-python, los nombres exactos de los
+        parámetros pueden no coincidir con los del protocolo OBS websocket.
+        Si esta llamada falla con un error de argumento inesperado, ejecuta
+        debug_obs_signature.py adaptado a 'set_stream_service_settings' para
+        confirmar la firma real en tu versión instalada.
+        """
+        client = self._client_or_raise()
+        self._logger.info("Configurando destino de streaming en OBS (YouTube)...")
+        try:
+            client.set_stream_service_settings(
+                "rtmp_custom",
+                {"server": server, "key": stream_key},
+            )
+        except Exception as exc:
+            raise OBSControllerError(
+                "No se pudo configurar el destino de streaming en OBS con el "
+                "servidor/stream key de YouTube."
+            ) from exc
+
     def start_streaming(self) -> None:
         client = self._client_or_raise()
         status = client.get_stream_status()
