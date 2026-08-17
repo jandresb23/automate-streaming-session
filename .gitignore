@@ -7,3 +7,4 @@ client_secret*.json
 secrets.txt
 youtube_token.json
 chrome_profile_facebook/
+*.png

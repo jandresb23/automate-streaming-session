@@ -98,6 +98,12 @@ class YouTubeAutomation:
                     "contentDetails": {
                         "enableAutoStart": False,
                         "enableAutoStop": False,
+                        # Deshabilitado explícitamente: si se deja en su valor
+                        # por defecto (habilitado), YouTube exige pasar primero
+                        # por el estado intermedio "testing" antes de "live",
+                        # y la transición directa ready→live falla con
+                        # "invalidTransition".
+                        "monitorStream": {"enableMonitorStream": False},
                     },
                 },
             )
