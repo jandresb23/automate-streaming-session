@@ -43,7 +43,28 @@ class OBSController:
             )
 
         self._logger.info("OBS no estaba abierto. Iniciando proceso...")
-        subprocess.Popen([str(self._config.executable_path)])
+        # IMPORTANTE: se fija 'cwd' (directorio de trabajo) a la carpeta del
+        # propio ejecutable. OBS necesita esto para localizar sus archivos
+        # internos/plugins; sin esto, el proceso puede fallar al iniciar
+        # de forma silenciosa (sin ventana visible ni error explícito).
+        process = subprocess.Popen(
+            [str(self._config.executable_path)],
+            cwd=str(self._config.executable_path.parent),
+        )
+
+        # Verificación temprana: si el proceso termina casi de inmediato,
+        # es señal clara de que algo impidió que OBS abriera (permisos,
+        # dependencia faltante, etc.), en vez de simplemente estar cargando.
+        time.sleep(2)
+        early_exit_code = process.poll()
+        if early_exit_code is not None:
+            raise OBSControllerError(
+                f"OBS se cerró inmediatamente después de intentar abrirlo "
+                f"(código de salida: {early_exit_code}). Intenta abrir OBS "
+                "manualmente haciendo doble clic en su ícono para ver si "
+                "muestra algún error, y verifica que OBS_EXECUTABLE_PATH "
+                "apunte exactamente al archivo obs64.exe correcto."
+            )
 
         for attempt in range(1, self._config.startup_wait_seconds + 1):
             time.sleep(1)
@@ -53,7 +74,8 @@ class OBSController:
 
         raise OBSControllerError(
             "OBS se lanzó pero no fue posible conectar al servidor WebSocket a tiempo. "
-            "Verifica que el WebSocket esté habilitado (Herramientas > WebSocket Server Settings)."
+            "Verifica que el WebSocket esté habilitado (Herramientas > WebSocket Server Settings) "
+            "y considera aumentar OBS_STARTUP_WAIT_SECONDS en tu .env."
         )
 
     def _try_connect(self) -> bool:

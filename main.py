@@ -1,6 +1,7 @@
 """
-Punto de entrada de la aplicación: una ventana con un único botón
-"Iniciar alistamiento" que ejecuta las 11 etapas definidas en Orchestrator.
+Punto de entrada de la aplicación: una ventana con campo de título, selector
+de visibilidad (público/privado) y un botón "Iniciar alistamiento" que
+ejecuta las etapas definidas en Orchestrator.
 
 El proceso corre en un hilo separado para no congelar la interfaz, y el
 paso manual (escaneo de QR) se resuelve con una ventana de confirmación.
@@ -25,10 +26,11 @@ class App:
 
         self.root = tk.Tk()
         self.root.title("Alistamiento de Streaming")
-        self.root.geometry("380x220")
+        self.root.geometry("380x280")
 
         self.status_var = tk.StringVar(value="Listo para iniciar.")
         self.title_var = tk.StringVar(value="")
+        self.privacy_var = tk.StringVar(value="private")
 
         tk.Label(
             self.root, text="Alistamiento automático de streaming",
@@ -39,6 +41,18 @@ class App:
         self.title_entry = tk.Entry(self.root, textvariable=self.title_var, width=36)
         self.title_entry.pack(pady=(0, 10))
         self.title_entry.focus()
+
+        tk.Label(self.root, text="Visibilidad del video:").pack()
+        privacy_frame = tk.Frame(self.root)
+        privacy_frame.pack(pady=(0, 10))
+        self.privacy_public_radio = tk.Radiobutton(
+            privacy_frame, text="Público", variable=self.privacy_var, value="public",
+        )
+        self.privacy_public_radio.pack(side=tk.LEFT, padx=10)
+        self.privacy_private_radio = tk.Radiobutton(
+            privacy_frame, text="Privado", variable=self.privacy_var, value="private",
+        )
+        self.privacy_private_radio.pack(side=tk.LEFT, padx=10)
 
         self.start_button = tk.Button(
             self.root, text="Iniciar alistamiento",
@@ -53,16 +67,25 @@ class App:
         if not title:
             messagebox.showwarning("Título requerido", "Ingresa el título de la sesión antes de continuar.")
             return
+        privacy_status = self.privacy_var.get()
 
         self.start_button.config(state=tk.DISABLED)
         self.title_entry.config(state=tk.DISABLED)
+        self.privacy_public_radio.config(state=tk.DISABLED)
+        self.privacy_private_radio.config(state=tk.DISABLED)
         self.status_var.set("Ejecutando alistamiento...")
-        thread = threading.Thread(target=self._run_flow, args=(title,), daemon=True)
+        thread = threading.Thread(
+            target=self._run_flow, args=(title, privacy_status), daemon=True
+        )
         thread.start()
 
-    def _run_flow(self, title: str) -> None:
+    def _run_flow(self, title: str, privacy_status: str) -> None:
         try:
-            self.orchestrator.run(title=title, wait_for_qr_scan=self._wait_for_qr_scan_dialog)
+            self.orchestrator.run(
+                title=title,
+                privacy_status=privacy_status,
+                wait_for_qr_scan=self._wait_for_qr_scan_dialog,
+            )
             self._set_status_threadsafe("✅ Transmisión iniciada correctamente.")
         except OrchestratorError as exc:
             self.logger.error("Error en el flujo: %s", exc)
@@ -73,6 +96,8 @@ class App:
         finally:
             self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.title_entry.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.privacy_public_radio.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.privacy_private_radio.config(state=tk.NORMAL))
 
     def _wait_for_qr_scan_dialog(self) -> None:
         """Se ejecuta en el hilo de trabajo; usa un evento para bloquear

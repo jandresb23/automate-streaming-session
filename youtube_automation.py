@@ -76,12 +76,18 @@ class YouTubeAutomation:
     # ------------------------------------------------------------------
     # Operaciones del flujo
     # ------------------------------------------------------------------
-    def create_broadcast_and_stream(self, title: str) -> tuple[str, str, str, str]:
+    def create_broadcast_and_stream(self, title: str, privacy_status: str) -> tuple[str, str, str, str]:
         """Crea el broadcast y el stream de ingesta, los vincula, y devuelve
-        (broadcast_id, stream_id, rtmp_server, stream_key)."""
+        (broadcast_id, stream_id, rtmp_server, stream_key).
+
+        `privacy_status` debe ser 'public' o 'private' (seleccionado por el
+        usuario en cada sesión desde la interfaz)."""
         youtube = self._client()
 
-        self._logger.info("Creando transmisión (broadcast) en YouTube: '%s'", title)
+        self._logger.info(
+            "Creando transmisión (broadcast) en YouTube: '%s' (visibilidad: %s)",
+            title, privacy_status,
+        )
         broadcast = (
             youtube.liveBroadcasts()
             .insert(
@@ -92,7 +98,7 @@ class YouTubeAutomation:
                         "scheduledStartTime": _now_iso(),
                     },
                     "status": {
-                        "privacyStatus": self._config.privacy_status,
+                        "privacyStatus": privacy_status,
                         "selfDeclaredMadeForKids": False,
                     },
                     "contentDetails": {

@@ -39,12 +39,13 @@ class Orchestrator:
         self._config = config
         self._logger = logger
 
-    def run(self, title: str, wait_for_qr_scan) -> None:
+    def run(self, title: str, privacy_status: str, wait_for_qr_scan) -> None:
         """
         Ejecuta el flujo completo.
 
-        `title` es el título de la sesión, solicitado por la interfaz antes
-        de iniciar el proceso (varía en cada transmisión).
+        `title` es el título de la sesión.
+        `privacy_status` es 'public' o 'private', seleccionado por el
+        usuario en cada sesión desde la interfaz.
 
         `wait_for_qr_scan` es una función sin argumentos que se invoca en el
         paso 6 (manual) para pausar hasta que el usuario confirme que ya
@@ -53,6 +54,10 @@ class Orchestrator:
         """
         if not title or not title.strip():
             raise OrchestratorError("El título de la sesión no puede estar vacío.")
+        if privacy_status not in ("public", "private"):
+            raise OrchestratorError(
+                f"Visibilidad inválida: '{privacy_status}'. Debe ser 'public' o 'private'."
+            )
 
         obs_controller = OBSController(self._config.obs, self._logger)
         youtube = YouTubeAutomation(self._config.youtube, self._logger)
@@ -71,7 +76,7 @@ class Orchestrator:
                 self._step("1. YouTube: autenticar", youtube.connect)
                 broadcast_id, stream_id, rtmp_server, stream_key = self._step(
                     "1-2. YouTube: crear transmisión y stream de ingesta",
-                    lambda: youtube.create_broadcast_and_stream(title),
+                    lambda: youtube.create_broadcast_and_stream(title, privacy_status),
                 )
 
                 # 3-5: VDO.Ninja, invitación y URL

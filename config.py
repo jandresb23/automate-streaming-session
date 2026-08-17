@@ -56,11 +56,11 @@ class YouTubeConfig:
     # Ruta donde se guarda el token ya autorizado tras el primer login
     # (se genera automáticamente con setup_youtube_auth.py).
     token_path: Path
-    # 'public', 'unlisted' o 'private'
-    privacy_status: str
     # Segundos máximos a esperar a que YouTube detecte la señal entrante
     # de OBS antes de intentar pasar el broadcast a "live".
     stream_active_timeout_seconds: int
+    # Nota: la visibilidad ('public'/'private') ya NO se define aquí.
+    # Se selecciona cada vez en la ventana de la aplicación (main.py).
 
 
 @dataclass(frozen=True)
@@ -96,7 +96,6 @@ def load_config() -> AppConfig:
     youtube = YouTubeConfig(
         client_secrets_path=Path(_require("YOUTUBE_CLIENT_SECRETS_PATH")),
         token_path=Path(os.getenv("YOUTUBE_TOKEN_PATH", "youtube_token.json")),
-        privacy_status=os.getenv("YOUTUBE_PRIVACY_STATUS", "unlisted"),
         stream_active_timeout_seconds=int(
             os.getenv("YOUTUBE_STREAM_ACTIVE_TIMEOUT_SECONDS", "60")
         ),
