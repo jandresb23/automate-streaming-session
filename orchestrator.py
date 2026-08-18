@@ -13,6 +13,8 @@ Orden actualizado (YouTube reemplaza a Facebook como servidor de transmisión):
   9. Validar formato de video (Matroska)
   10. Configurar en OBS el servidor/stream key de YouTube e iniciar transmisión
   11. Esperar a que YouTube detecte la señal y transicionar el broadcast a "live"
+  12. Abrir la página pública de la transmisión (youtube.com/watch) para
+      validación visual
 
 A diferencia del flujo con Facebook, aquí NO se usa Playwright/navegador para
 YouTube — solo llamadas directas a su API oficial, mucho más robustas.
@@ -118,6 +120,12 @@ class Orchestrator:
                 self._step(
                     "11. YouTube: iniciar transmisión en vivo",
                     lambda: youtube.go_live(broadcast_id),
+                )
+
+                # 12: abrir la página pública de la transmisión para validación visual
+                self._step(
+                    "12. YouTube: abrir página pública para validar",
+                    lambda: youtube.open_watch_page(broadcast_id),
                 )
 
                 self._logger.info("✅ Alistamiento completado. La transmisión está en vivo.")

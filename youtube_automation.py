@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime
 import logging
 import time
+import webbrowser
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -183,3 +184,19 @@ class YouTubeAutomation:
             raise YouTubeAutomationError(
                 f"No se pudo transicionar el broadcast a 'live': {exc}"
             ) from exc
+
+    def open_watch_page(self, broadcast_id: str) -> None:
+        """Abre en el navegador predeterminado del sistema la página pública
+        de reproducción (youtube.com/watch), tal como la vería la audiencia,
+        para validar visualmente que la transmisión ya está publicada."""
+        watch_url = f"https://www.youtube.com/watch?v={broadcast_id}"
+        self._logger.info("Abriendo la página pública de la transmisión: %s", watch_url)
+        try:
+            webbrowser.open(watch_url)
+        except Exception as exc:
+            # No es un error crítico del flujo: la transmisión ya está en
+            # vivo aunque no se pueda abrir el navegador automáticamente.
+            self._logger.warning(
+                "No se pudo abrir el navegador automáticamente (%s). "
+                "Puedes verificar manualmente en: %s", exc, watch_url,
+            )
