@@ -77,12 +77,16 @@ class YouTubeAutomation:
     # ------------------------------------------------------------------
     # Operaciones del flujo
     # ------------------------------------------------------------------
-    def create_broadcast_and_stream(self, title: str, privacy_status: str) -> tuple[str, str, str, str]:
+    def create_broadcast_and_stream(
+        self, title: str, privacy_status: str, description: str = ""
+    ) -> tuple[str, str, str, str]:
         """Crea el broadcast y el stream de ingesta, los vincula, y devuelve
         (broadcast_id, stream_id, rtmp_server, stream_key).
 
         `privacy_status` debe ser 'public' o 'private' (seleccionado por el
-        usuario en cada sesión desde la interfaz)."""
+        usuario en cada sesión desde la interfaz).
+        `description` es opcional; si se deja vacía, YouTube no muestra
+        descripción para la transmisión."""
         youtube = self._client()
 
         self._logger.info(
@@ -96,6 +100,7 @@ class YouTubeAutomation:
                 body={
                     "snippet": {
                         "title": title,
+                        "description": description or "",
                         "scheduledStartTime": _now_iso(),
                     },
                     "status": {
@@ -183,6 +188,21 @@ class YouTubeAutomation:
         except Exception as exc:
             raise YouTubeAutomationError(
                 f"No se pudo transicionar el broadcast a 'live': {exc}"
+            ) from exc
+
+    def end_broadcast(self, broadcast_id: str) -> None:
+        """Finaliza la transmisión en YouTube (transición a 'complete').
+        Debe llamarse ANTES de detener el streaming en OBS, para que
+        YouTube cierre la transmisión de forma ordenada."""
+        youtube = self._client()
+        self._logger.info("Finalizando transmisión en YouTube (transición a 'complete')...")
+        try:
+            youtube.liveBroadcasts().transition(
+                broadcastStatus="complete", id=broadcast_id, part="id,status"
+            ).execute()
+        except Exception as exc:
+            raise YouTubeAutomationError(
+                f"No se pudo finalizar el broadcast en YouTube: {exc}"
             ) from exc
 
     def open_watch_page(self, broadcast_id: str) -> None:

@@ -221,6 +221,19 @@ class OBSController:
                 "servidor/stream key de YouTube."
             ) from exc
 
+    def stop_streaming(self) -> None:
+        client = self._client_or_raise()
+        status = client.get_stream_status()
+        if not getattr(status, "output_active", False):
+            self._logger.info("OBS ya no estaba transmitiendo. Nada que detener.")
+            return
+
+        self._logger.info("Deteniendo transmisión en OBS...")
+        try:
+            client.stop_stream()
+        except Exception as exc:
+            raise OBSControllerError("No se pudo detener la transmisión en OBS.") from exc
+
     def start_streaming(self) -> None:
         client = self._client_or_raise()
         status = client.get_stream_status()

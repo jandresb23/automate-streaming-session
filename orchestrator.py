@@ -18,6 +18,10 @@ Orden actualizado (YouTube reemplaza a Facebook como servidor de transmisión):
 
 A diferencia del flujo con Facebook, aquí NO se usa Playwright/navegador para
 YouTube — solo llamadas directas a su API oficial, mucho más robustas.
+
+Además de `run()`, este módulo expone `stop_session()` para finalizar una
+transmisión en curso: primero termina el broadcast en YouTube y luego
+detiene el streaming en OBS.
 """
 
 from __future__ import annotations
@@ -41,13 +45,22 @@ class Orchestrator:
         self._config = config
         self._logger = logger
 
-    def run(self, title: str, privacy_status: str, wait_for_qr_scan) -> None:
+    def run(
+        self,
+        title: str,
+        privacy_status: str,
+        wait_for_qr_scan,
+        description: str = "",
+    ) -> str:
         """
-        Ejecuta el flujo completo.
+        Ejecuta el flujo completo. Devuelve el `broadcast_id` de YouTube,
+        necesario para poder detener la transmisión más adelante con
+        `stop_session`.
 
         `title` es el título de la sesión.
         `privacy_status` es 'public' o 'private', seleccionado por el
         usuario en cada sesión desde la interfaz.
+        `description` es opcional.
 
         `wait_for_qr_scan` es una función sin argumentos que se invoca en el
         paso 6 (manual) para pausar hasta que el usuario confirme que ya
@@ -78,7 +91,9 @@ class Orchestrator:
                 self._step("1. YouTube: autenticar", youtube.connect)
                 broadcast_id, stream_id, rtmp_server, stream_key = self._step(
                     "1-2. YouTube: crear transmisión y stream de ingesta",
-                    lambda: youtube.create_broadcast_and_stream(title, privacy_status),
+                    lambda: youtube.create_broadcast_and_stream(
+                        title, privacy_status, description
+                    ),
                 )
 
                 # 3-5: VDO.Ninja, invitación y URL
@@ -129,6 +144,7 @@ class Orchestrator:
                 )
 
                 self._logger.info("✅ Alistamiento completado. La transmisión está en vivo.")
+                return broadcast_id
 
             except (OBSControllerError, VDONinjaAutomationError, YouTubeAutomationError) as exc:
                 raise OrchestratorError(str(exc)) from exc
@@ -136,6 +152,33 @@ class Orchestrator:
                 vdo_context.close()
                 vdo_browser.close()
                 obs_controller.disconnect()
+
+    def stop_session(self, broadcast_id: str) -> None:
+        """Detiene una transmisión en curso: primero finaliza el broadcast
+        en YouTube, y después detiene el streaming en OBS.
+
+        No requiere Playwright/navegador — solo la API de YouTube y el
+        WebSocket de OBS, ambos ya en uso por el resto del proyecto.
+        """
+        if not broadcast_id:
+            raise OrchestratorError("No hay ninguna transmisión activa para detener.")
+
+        obs_controller = OBSController(self._config.obs, self._logger)
+        youtube = YouTubeAutomation(self._config.youtube, self._logger)
+
+        try:
+            self._step("YouTube: autenticar", youtube.connect)
+            self._step(
+                "YouTube: finalizar transmisión",
+                lambda: youtube.end_broadcast(broadcast_id),
+            )
+            self._step("OBS: verificar conexión", obs_controller.ensure_running)
+            self._step("OBS: detener transmisión", obs_controller.stop_streaming)
+            self._logger.info("⏹ Transmisión detenida correctamente.")
+        except (OBSControllerError, YouTubeAutomationError) as exc:
+            raise OrchestratorError(str(exc)) from exc
+        finally:
+            obs_controller.disconnect()
 
     def _step(self, description: str, action):
         self._logger.info("▶ %s", description)
