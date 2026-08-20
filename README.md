@@ -94,3 +94,11 @@ stream_automation/
 ├── .env.example
 └── .gitignore
 ```
+
+## Licencia
+
+Este proyecto está bajo la licencia **MIT** — ver el archivo [LICENSE](./LICENSE)
+para el texto completo. En resumen: cualquiera puede usar, copiar, modificar
+y distribuir este código, incluso con fines comerciales, siempre que
+mantenga el aviso de copyright y la licencia original.
+
