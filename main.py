@@ -12,11 +12,17 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox
+
+from PIL import Image, ImageTk
 
 from config import load_config
 from logger import setup_logger
 from orchestrator import Orchestrator, OrchestratorError
+
+LOGO_PATH = Path(__file__).parent / "assets" / "cursal_logo.png"
+LOGO_MAX_WIDTH = 260  # píxeles
 
 
 class App:
@@ -31,16 +37,20 @@ class App:
 
         self.root = tk.Tk()
         self.root.title("Alistamiento de Streaming")
-        self.root.geometry("400x420")
+        self.root.geometry("400x480")
 
         self.status_var = tk.StringVar(value="Listo para iniciar.")
         self.title_var = tk.StringVar(value="")
         self.privacy_var = tk.StringVar(value="private")
 
+        self._logo_image = self._load_logo()  # se guarda la referencia para que no se pierda
+        if self._logo_image is not None:
+            tk.Label(self.root, image=self._logo_image).pack(pady=(15, 5))
+
         tk.Label(
             self.root, text="Alistamiento automático de streaming",
             font=("Segoe UI", 12, "bold"),
-        ).pack(pady=(20, 10))
+        ).pack(pady=(0, 10))
 
         tk.Label(self.root, text="Título de la sesión:").pack()
         self.title_entry = tk.Entry(self.root, textvariable=self.title_var, width=40)
@@ -157,6 +167,27 @@ class App:
     # ------------------------------------------------------------------
     # Utilidades de interfaz
     # ------------------------------------------------------------------
+    def _load_logo(self) -> ImageTk.PhotoImage | None:
+        """Carga el logo desde assets/, redimensionado manteniendo la
+        proporción. Si el archivo no existe, la app sigue funcionando
+        normalmente sin logo (no es un error crítico)."""
+        if not LOGO_PATH.exists():
+            self.logger.warning("No se encontró el logo en '%s'; se omite.", LOGO_PATH)
+            return None
+
+        try:
+            image = Image.open(LOGO_PATH)
+            width, height = image.size
+            if width > LOGO_MAX_WIDTH:
+                ratio = LOGO_MAX_WIDTH / width
+                image = image.resize(
+                    (LOGO_MAX_WIDTH, int(height * ratio)), Image.LANCZOS
+                )
+            return ImageTk.PhotoImage(image)
+        except Exception:
+            self.logger.exception("No se pudo cargar el logo; se omite.")
+            return None
+
     def _set_inputs_state(self, state: str) -> None:
         self.start_button.config(state=state)
         self.title_entry.config(state=state)
